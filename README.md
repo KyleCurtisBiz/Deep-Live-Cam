@@ -241,10 +241,6 @@ python3.10 run.py --execution-provider coreml
   brew cleanup
   ```
 
-- The `--max-memory` option limits RAM usage in gigabytes. macOS caps this value
-  by its current hard limit, so the program automatically lowers the request if
-  needed.
-
 **CoreML Execution Provider (Apple Legacy)**
 
 1. Install dependencies:
