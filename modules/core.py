@@ -144,14 +144,18 @@ def limit_resources() -> None:
     # limit memory usage
     if modules.globals.max_memory:
         memory = modules.globals.max_memory * 1024 ** 3
-        if platform.system().lower() == 'darwin':
-            memory = modules.globals.max_memory * 1024 ** 6
         if platform.system().lower() == 'windows':
             import ctypes
             kernel32 = ctypes.windll.kernel32
             kernel32.SetProcessWorkingSetSize(-1, ctypes.c_size_t(memory), ctypes.c_size_t(memory))
         else:
             import resource
+            if platform.system().lower() == 'darwin':
+                # macOS enforces the hard limit for RLIMIT_DATA, so make sure the
+                # requested soft limit does not exceed it
+                soft, hard = resource.getrlimit(resource.RLIMIT_DATA)
+                if hard != resource.RLIM_INFINITY and memory > hard:
+                    memory = hard
             resource.setrlimit(resource.RLIMIT_DATA, (memory, memory))
 
 
