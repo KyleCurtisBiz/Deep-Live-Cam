@@ -1,4 +1,4 @@
-import os 
+import os
 import cv2
 import numpy as np
 
@@ -8,11 +8,12 @@ def imread_unicode(path, flags=cv2.IMREAD_COLOR):
 
 # Utility function to support unicode characters in file paths for writing
 def imwrite_unicode(path, img, params=None):
+    """Write ``img`` to ``path`` even if the path contains non ASCII characters."""
     root, ext = os.path.splitext(path)
     if not ext:
         ext = ".png"
-        result, encoded_img = cv2.imencode(ext, img, params if params else [])
-        result, encoded_img = cv2.imencode(f".{ext}", img, params if params is not None else [])
+        path = path + ext
+    result, encoded_img = cv2.imencode(ext, img, params if params is not None else [])
+    if result:
         encoded_img.tofile(path)
-        return True
-    return False
+    return bool(result)
