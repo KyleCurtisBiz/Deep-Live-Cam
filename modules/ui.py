@@ -887,10 +887,17 @@ def create_webcam_preview(camera_index: int):
     fps = 0
 
     while True:
+        loop_start = time.time()
+        
+        # Camera capture timing
+        capture_start = time.time()
         ret, frame = cap.read()
+        capture_time = time.time() - capture_start
         if not ret:
             break
 
+        # Frame preparation timing
+        prep_start = time.time()
         temp_frame = frame.copy()
 
         if modules.globals.live_mirror:
@@ -905,25 +912,39 @@ def create_webcam_preview(camera_index: int):
             temp_frame = fit_image_to_size(
                 temp_frame, PREVIEW.winfo_width(), PREVIEW.winfo_height()
             )
+        prep_time = time.time() - prep_start
 
+        # Face processing timing
+        processing_start = time.time()
         if not modules.globals.map_faces:
             if source_image is None and modules.globals.source_path:
+                source_load_start = time.time()
                 source_image = get_one_face(cv2.imread(modules.globals.source_path))
+                source_load_time = time.time() - source_load_start
+                print(f"[TIMING] Source face load: {source_load_time:.3f}s")
 
             for frame_processor in frame_processors:
+                processor_start = time.time()
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
                     if modules.globals.fp_ui["face_enhancer"]:
                         temp_frame = frame_processor.process_frame(None, temp_frame)
                 else:
                     temp_frame = frame_processor.process_frame(source_image, temp_frame)
+                processor_time = time.time() - processor_start
+                print(f"[TIMING] {frame_processor.NAME}: {processor_time:.3f}s")
         else:
             modules.globals.target_path = None
             for frame_processor in frame_processors:
+                processor_start = time.time()
                 if frame_processor.NAME == "DLC.FACE-ENHANCER":
                     if modules.globals.fp_ui["face_enhancer"]:
                         temp_frame = frame_processor.process_frame_v2(temp_frame)
                 else:
                     temp_frame = frame_processor.process_frame_v2(temp_frame)
+                processor_time = time.time() - processor_start
+                print(f"[TIMING] {frame_processor.NAME} (map_faces): {processor_time:.3f}s")
+        
+        processing_time = time.time() - processing_start
 
         # Calculate and display FPS
         current_time = time.time()
@@ -944,6 +965,8 @@ def create_webcam_preview(camera_index: int):
                 2,
             )
 
+        # UI rendering timing
+        ui_start = time.time()
         image = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
         image = Image.fromarray(image)
         image = ImageOps.contain(
@@ -952,6 +975,11 @@ def create_webcam_preview(camera_index: int):
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
         ROOT.update()
+        ui_time = time.time() - ui_start
+        
+        # Total loop timing
+        total_time = time.time() - loop_start
+        print(f"[TIMING] TOTAL LOOP: {total_time:.3f}s | Capture: {capture_time:.3f}s | Prep: {prep_time:.3f}s | Processing: {processing_time:.3f}s | UI: {ui_time:.3f}s")
 
         if PREVIEW.state() == "withdrawn":
             break

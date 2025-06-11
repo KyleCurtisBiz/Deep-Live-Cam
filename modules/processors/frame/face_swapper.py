@@ -61,9 +61,49 @@ def get_face_swapper() -> Any:
     with THREAD_LOCK:
         if FACE_SWAPPER is None:
             model_path = os.path.join(models_dir, "inswapper_128_fp16.onnx")
-            FACE_SWAPPER = insightface.model_zoo.get_model(
-                model_path, providers=modules.globals.execution_providers
-            )
+            
+            # Optimize ONNX Runtime session for performance
+            import onnxruntime as ort
+            providers = modules.globals.execution_providers
+            
+            # Create session options for optimization
+            session_options = ort.SessionOptions()
+            session_options.enable_mem_pattern = False
+            session_options.enable_mem_reuse = False 
+            session_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            
+            # Add provider options for different providers
+            provider_options = []
+            for provider in providers:
+                if provider == 'CPUExecutionProvider':
+                    provider_options.append({
+                        'CPUExecutionProvider': {
+                            'enable_cpu_mem_arena': True,
+                            'arena_extend_strategy': 'kSameAsRequested',
+                            'intra_op_num_threads': modules.globals.execution_threads,
+                            'inter_op_num_threads': modules.globals.execution_threads
+                        }
+                    })
+                elif provider == 'CoreMLExecutionProvider':
+                    provider_options.append({
+                        'CoreMLExecutionProvider': {
+                            'use_cpu_only': False,
+                            'require_static_input_shapes': False
+                        }
+                    })
+                else:
+                    provider_options.append({})
+                
+            try:
+                FACE_SWAPPER = insightface.model_zoo.get_model(
+                    model_path, providers=providers, provider_options=provider_options
+                )
+            except Exception as e:
+                print(f"Error loading with provider options: {e}")
+                # Fallback to basic loading
+                FACE_SWAPPER = insightface.model_zoo.get_model(
+                    model_path, providers=providers
+                )
     return FACE_SWAPPER
 
 
@@ -99,23 +139,43 @@ def swap_face(source_face: Face, target_face: Face, temp_frame: Frame) -> Frame:
 
 
 def process_frame(source_face: Face, temp_frame: Frame) -> Frame:
+    import time
+    start_time = time.time()
+    
     if modules.globals.color_correction:
         temp_frame = cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB)
 
     if modules.globals.many_faces:
+        detection_start = time.time()
         many_faces = get_many_faces(temp_frame)
+        detection_time = time.time() - detection_start
+        print(f"[FACE_SWAPPER] Face detection: {detection_time:.3f}s")
+        
         if many_faces:
             for target_face in many_faces:
                 if source_face and target_face:
+                    swap_start = time.time()
                     temp_frame = swap_face(source_face, target_face, temp_frame)
+                    swap_time = time.time() - swap_start
+                    print(f"[FACE_SWAPPER] Face swap: {swap_time:.3f}s")
                 else:
                     print("Face detection failed for target/source.")
     else:
+        detection_start = time.time()
         target_face = get_one_face(temp_frame)
+        detection_time = time.time() - detection_start
+        print(f"[FACE_SWAPPER] Face detection: {detection_time:.3f}s")
+        
         if target_face and source_face:
+            swap_start = time.time()
             temp_frame = swap_face(source_face, target_face, temp_frame)
+            swap_time = time.time() - swap_start
+            print(f"[FACE_SWAPPER] Face swap: {swap_time:.3f}s")
         else:
             logging.error("Face detection failed for target or source.")
+    
+    total_time = time.time() - start_time
+    print(f"[FACE_SWAPPER] Total process_frame: {total_time:.3f}s")
     return temp_frame
 
 
