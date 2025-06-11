@@ -132,6 +132,7 @@ Place these files in the "**models**" folder.
 **4. Install Dependencies**
 
 We highly recommend using a `venv` to avoid issues.
+The `requirements.txt` file now includes `scikit-learn==1.4.2`.
 
 
 For Windows:
